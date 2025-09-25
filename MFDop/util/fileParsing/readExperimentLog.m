@@ -1,14 +1,15 @@
-function [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog(xlsxFile, basedir, outdir, dateStr)
+function [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog(xlsxFile, basedir, outdir, dateStr, printdebug)
 % READEXPERIMENTLOG Read experiment log from Excel file and generate processing parameters
 %
 % USAGE:
-%   [rawfn, heads, fout] = readExperimentLog(xlsxFile, basedir, outdir, dateStr)
+%   [rawfn, heads, fout] = readExperimentLog(xlsxFile, basedir, outdir, dateStr, printdebug)
 %
 % INPUTS:
 %   xlsxFile - Path to Excel log file (e.g., 'STONE2025_09182025.xlsx')
 %   basedir  - Base directory containing DragonData files
 %   outdir   - Output directory for processed files
 %   dateStr  - Date string for output filenames (e.g., '20250918')
+%   printdebug - Optional flag to enable debug output (default: false)
 %
 % OUTPUTS:
 %   rawfn - Cell array of file lists for each trial
@@ -19,17 +20,129 @@ function [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog(xlsxFile,
 % EXAMPLE:
 %   [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog('STONE2025_09182025.xlsx', ...
 %       '/media/wilsongr/LaCie/STONE_20250918/MFDop', ...
-%       'data/20250918/MFDop_L1', '20250918');
+%       'data/20250918/MFDop_L1', '20250918', false);
+%
+% EXCEL FILE FORMAT REQUIREMENTS:
+%   The Excel file must have the following structure:
+%   - Row 1: Headers including 'Case&Trial', 'Time Start (CDT)', 'MFDop Transmitting Beams', 'MFDop File'
+%   - Row 2+: Data rows with valid values (no "?" in Time Start column)
+%   - Column A: Case&Trial names (e.g., '1.3_01', 'd142f4S10X40_01')
+%   - Column C: Time Start in HH:MM:SS format (e.g., '10:38:00')
+%   - Column G: MFDop Transmitting Beams (e.g., 'Aux 1, Aux 2', 'Main Head')
+%   - Column L: MFDop File numbers (numeric, e.g., 0, 1, 2, ...)
 %
 % NOTES:
 %   - Robust parsing handles various beam name formats (Aux1, Aux 1, aux_1, etc.)
 %   - X-coordinates are automatically extracted and appended to filenames
 %   - For Main head: uses MFDop Head X-Coord column (single value)
 %   - For Aux heads: extracts x from coordinate triplets like "(137, 123.5, 26)"
-%   - Output format: DD_YYYYMMDD_caseXpXTrialXX_xNNN_HeadName_L1
+%   - Output format: DD_YYYYMMDD_casename_xNNN_HeadName_L1
 
-    % Read the Excel file
-    data = readtable(xlsxFile);
+    % Set default debug flag if not provided
+    if nargin < 5
+        printdebug = false;
+    end
+
+    % Read the Excel file using readcell for explicit control over row reading
+    % This ensures we get ALL rows including the header row
+    cellData = readcell(xlsxFile);
+
+    % Convert to table format for compatibility with rest of code
+    % Remove completely empty rows first
+    validRows = false(size(cellData, 1), 1);
+    for i = 1:size(cellData, 1)
+        % A row is valid if any of the first 12 columns has non-empty content
+        hasContent = false;
+        for j = 1:min(12, size(cellData, 2))
+            val = cellData{i, j};
+            if ~isempty(val) && ~(isnumeric(val) && isnan(val))
+                hasContent = true;
+                break;
+            end
+        end
+        validRows(i) = hasContent;
+    end
+    cellData = cellData(validRows, :);
+
+    % Validate basic structure
+    if size(cellData, 2) < 12
+        error('Excel file format error: Expected at least 12 columns, found %d. Please check file format.', size(cellData, 2));
+    end
+
+    if size(cellData, 1) < 2
+        error('Excel file format error: Expected header row plus data rows, found only %d rows total.', size(cellData, 1));
+    end
+
+    % Validate that the first row contains expected headers
+    if printdebug
+        fprintf('Debug: First row contents (should be headers):\n');
+        for i = 1:min(12, size(cellData, 2))
+            val = cellData{1, i};
+            if ischar(val)
+                fprintf('  Column %d: "%s"\n', i, val);
+            else
+                fprintf('  Column %d: %s\n', i, string(val));
+            end
+        end
+    end
+
+    % Check for critical header patterns
+    col1_valid = false; col7_valid = false; col12_valid = false;
+
+    % Check Column 1 (Case&Trial)
+    val = cellData{1, 1};
+    if ischar(val) || isstring(val)
+        valStr = lower(string(val));
+        col1_valid = contains(valStr, 'case') || contains(valStr, 'trial');
+    end
+
+    % Check Column 7 (Beams)
+    val = cellData{1, 7};
+    if ischar(val) || isstring(val)
+        valStr = lower(string(val));
+        col7_valid = contains(valStr, 'beam') || contains(valStr, 'transmit');
+    end
+
+    % Check Column 12 (File)
+    val = cellData{1, 12};
+    if ischar(val) || isstring(val)
+        valStr = lower(string(val));
+        col12_valid = contains(valStr, 'file') || contains(valStr, 'mfdop');
+    end
+
+    if printdebug
+        fprintf('Header validation: Col1=%d, Col7=%d, Col12=%d\n', col1_valid, col7_valid, col12_valid);
+    end
+
+    % If headers don't validate, check if first row might actually be data
+    if sum([col1_valid, col7_valid, col12_valid]) < 2
+        if printdebug
+            fprintf('Headers not found in row 1. Checking if row 1 contains data instead...\n');
+        end
+        % Check if first row looks like data (has case name pattern and beam names)
+        val1 = cellData{1, 1}; val7 = cellData{1, 7};
+        if ischar(val1) && ischar(val7) && (contains(val7, 'Aux') || contains(val7, 'Main'))
+            warning(['Excel file appears to be missing header row. Proceeding with all rows as data.\n' ...
+                    'Expected format: Row 1 should contain headers like "Case&Trial", "MFDop Transmitting Beams", etc.']);
+            dataRows = cellData;
+        else
+            error(['Excel file format error: Cannot determine data structure.\n' ...
+                   'Please ensure your Excel file has proper headers in row 1.']);
+        end
+    else
+        % Headers found, remove header row
+        dataRows = cellData(2:end, :);
+    end
+
+    % Convert to table with generic variable names for compatibility
+    data = cell2table(dataRows, 'VariableNames', ...
+        arrayfun(@(x) sprintf('Var%d', x), 1:size(dataRows, 2), 'UniformOutput', false));
+
+    % Final validation
+    if height(data) == 0
+        error(['Excel file format error: No valid data rows found.\n' ...
+               'Please ensure the Excel file contains data rows with valid entries.']);
+    end
 
     % Initialize output arrays
     rawfn = {};
@@ -80,12 +193,13 @@ function [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog(xlsxFile,
             continue;
         end
 
-        % Parse case/trial string (e.g., '1.3_03' -> 'case1p3Trial03')
-        caseTrialClean = strrep(caseTrialStr, '.', 'p');
-        caseTrialClean = strrep(caseTrialClean, '_', 'Trial');
-        if ~startsWith(caseTrialClean, 'case')
-            caseTrialClean = ['case' caseTrialClean];
-        end
+        % % Parse case/trial string (e.g., '1.3_03' -> 'case1p3Trial03')
+        % caseTrialClean = strrep(caseTrialStr, '.', 'p');
+        % caseTrialClean = strrep(caseTrialClean, '_', 'Trial');
+        % if ~startsWith(caseTrialClean, 'case')
+        %     caseTrialClean = ['case' caseTrialClean];
+        % end
+        caseTrialClean=caseTrialStr;  % GW: After changing to more descriptive case ID's
 
         % Parse beam configuration using tokenization approach
         [headConfig, xCoord] = parseBeamConfiguration(beamsStr, mainXCoord, aux1CoordsStr, aux2CoordsStr);
