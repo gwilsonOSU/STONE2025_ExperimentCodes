@@ -189,8 +189,52 @@ function [rawfn, heads, fout, startTimeApprox_cdt] = readExperimentLog(xlsxFile,
         end
 
         % Skip rows with missing critical data
-        if isempty(caseTrialStr) || isempty(beamsStr) || isnan(fileNum)
+        if isempty(caseTrialStr) || isempty(beamsStr) || (isnumeric(fileNum) && isnan(fileNum))
             continue;
+        end
+
+        % Skip rows where MFDop File entry is not a valid number (e.g., "No MFDop File")
+        % Handle cell arrays (common with readcell)
+        if iscell(fileNum)
+            if ~isempty(fileNum)
+                fileNum = fileNum{1};  % Extract from cell
+            else
+                if printdebug
+                    fprintf('Skipping trial %s: Empty cell for MFDop File entry\n', caseTrialStr);
+                end
+                continue;
+            end
+        end
+
+        if isnumeric(fileNum)
+            % Already numeric - check if it's valid
+            if ~isfinite(fileNum) || fileNum < 0
+                if printdebug
+                    fprintf('Skipping trial %s: Invalid numeric MFDop File entry (%g)\n', caseTrialStr, fileNum);
+                end
+                continue;
+            end
+        else
+            % Try to convert string to number
+            if ischar(fileNum) || isstring(fileNum)
+                numericFileNum = str2double(fileNum);
+                if isnan(numericFileNum) || numericFileNum < 0
+                    % Not a valid number or negative
+                    if printdebug
+                        fprintf('Skipping trial %s: Invalid MFDop File entry ("%s")\n', caseTrialStr, string(fileNum));
+                    end
+                    continue;
+                else
+                    % Valid numeric string - convert it
+                    fileNum = numericFileNum;
+                end
+            else
+                % Neither numeric nor string/char
+                if printdebug
+                    fprintf('Skipping trial %s: Invalid MFDop File entry type\n', caseTrialStr);
+                end
+                continue;
+            end
         end
 
         % % Parse case/trial string (e.g., '1.3_03' -> 'case1p3Trial03')
@@ -393,32 +437,44 @@ function startTimeDatenum = parseStartTime(startTimeValue, dateStr)
             warning('Could not parse numeric start time: %f', startTimeValue);
         end
     elseif ischar(startTimeValue) || (iscell(startTimeValue) && ~isempty(startTimeValue))
-        % Handle string time format like "10:38:00"
+        % Handle string time format like "10:38:00" or cell arrays
         if iscell(startTimeValue)
-            timeStr = startTimeValue{1};
+            timeValue = startTimeValue{1};
         else
-            timeStr = startTimeValue;
+            timeValue = startTimeValue;
         end
 
-        if ~isempty(timeStr)
-            try
-                % Parse the date string to get the base date
-                baseDate = datenum(dateStr, 'yyyymmdd');
-                % Parse the time string (assume HH:MM:SS format)
-                timeParts = sscanf(timeStr, '%d:%d:%d');
-                if length(timeParts) >= 2
-                    hours = timeParts(1);
-                    minutes = timeParts(2);
-                    seconds = 0;
-                    if length(timeParts) >= 3
-                        seconds = timeParts(3);
-                    end
-                    % Convert to fraction of day and add to base date
-                    timeFraction = (hours + minutes/60 + seconds/3600) / 24;
-                    startTimeDatenum = baseDate + timeFraction;
+        if ~isempty(timeValue)
+            % Check if the extracted value is actually numeric (Excel time fraction)
+            if isnumeric(timeValue)
+                try
+                    % Parse the date string to get the base date
+                    baseDate = datenum(dateStr, 'yyyymmdd');
+                    % Add the time fraction
+                    startTimeDatenum = baseDate + timeValue;
+                catch
+                    warning('Could not parse numeric start time from cell: %f', timeValue);
                 end
-            catch
-                warning('Could not parse string start time: %s', timeStr);
+            elseif ischar(timeValue) || isstring(timeValue)
+                try
+                    % Parse the date string to get the base date
+                    baseDate = datenum(dateStr, 'yyyymmdd');
+                    % Parse the time string (assume HH:MM:SS format)
+                    timeParts = sscanf(char(timeValue), '%d:%d:%d');
+                    if length(timeParts) >= 2
+                        hours = timeParts(1);
+                        minutes = timeParts(2);
+                        seconds = 0;
+                        if length(timeParts) >= 3
+                            seconds = timeParts(3);
+                        end
+                        % Convert to fraction of day and add to base date
+                        timeFraction = (hours + minutes/60 + seconds/3600) / 24;
+                        startTimeDatenum = baseDate + timeFraction;
+                    end
+                catch
+                    warning('Could not parse string start time: %s', char(timeValue));
+                end
             end
         end
     end
