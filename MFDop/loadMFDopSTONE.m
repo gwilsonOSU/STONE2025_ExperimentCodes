@@ -1,6 +1,6 @@
-function ddop = loadMFDopSTONE(rawfn,heads,soundspeed)
+function ddop = loadMFDopSTONE(rawfn,heads,soundspeed,nnode)
 %
-% ddop = loadMFDopSTONE(rawfn,heads,[soundspeed])
+% ddop = loadMFDopSTONE(rawfn,heads,[soundspeed,nnode])
 %
 % MFDop file-loading program for STONE 2025.  Loads "raw" mat-files, the
 % ones named DragonData.255.25.DragonDop.NNNNN_N.mat that are obtained by
@@ -80,7 +80,9 @@ opts_unwrap.min_correl = 40;
 
 % nnode is the number of DD pitaya nodes (for STONE we had 4, for
 % Blasstex/ArchCape it was 3)
-nnode=4;
+if(~exist('nnode'))
+  nnode=4;  % default
+end
 
 % do some detective work to re-order the input files, accounting for lack of
 % zero-padding in the names.  For STONE, an example filename is:
@@ -136,7 +138,7 @@ for ifile=1:length(rawfn)
   else
 
     % parse the raw mat-file into human-readable variables
-    doprawmat=unpackDDmat(rawmat);
+    doprawmat=unpackDDmat(rawmat,nnode);
     clear rawmat  % no longer needed
 
     for ihead=1:length(heads)
@@ -168,7 +170,7 @@ for ifile=1:length(rawfn)
         % choose the beam(s) we want based on the selected head, and only retain
         % those beams in this struct for this head
         if(strcmp(heads{ihead},'Aux1'))
-          thisdopraw.beamname={'Aux_1H','Aux_1L'};
+          thisdopraw.beamname={'Aux_1H'}; %,'Aux_1L'};
         elseif(strcmp(heads{ihead},'Aux2'))
           thisdopraw.beamname={'Aux_2'};
         else
@@ -219,7 +221,7 @@ for ifile=1:length(rawfn)
         if(strcmp(heads{1},'Main'))  % Main: main head with 5 beams
           beamlist = {'Beam_1','Beam_2', 'Beam_3', 'Beam_4', 'Beam_CL'};
         elseif(strcmp(heads{1},'Aux1'))  % Aux1: vertical aux beam with hi and lo-gain
-          beamlist = {'Aux_1H','Aux_1L'};
+          beamlist = {'Aux_1H'}; %,'Aux_1L'};
         elseif(strcmp(heads{1},'Aux2'))  % Aux2: horizontal aux beam
           beamlist = {'Aux_2'};
         end

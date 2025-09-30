@@ -23,25 +23,42 @@ end
 %------------------------------------
 
 % constants shared across all units
-ddop.pingpairs    = double(ddopraw.Config.Unit1_pingPairsPerEnsemble);
-ddop.pingInterval = double(ddopraw.Config.Unit1_pingInterval);
-ddop.tau          = double(ddopraw.Config.Unit1_pulseLength);
+if(nnode>1)
+  fld_pingPairsPerEnsemble='Unit1_pingPairsPerEnsemble';
+  fld_pingInterval='Unit1_pingInterval';
+  fld_pulseLength='Unit1_pulseLength';
+else
+  fld_pingPairsPerEnsemble='pingPairsPerEnsemble';
+  fld_pingInterval='pingInterval';
+  fld_pulseLength='pulseLength';
+end
+ddop.pingpairs    = double(getfield(ddopraw.Config,fld_pingPairsPerEnsemble));
+ddop.pingInterval = double(getfield(ddopraw.Config,fld_pingInterval));
+ddop.tau          = double(getfield(ddopraw.Config,fld_pulseLength));
 ddop.r            = double(ddopraw.Data.DragonDop1_Range)';
 
 % get list of enabled frequencies
-unit=1;
 for pulse=1:4
-  thisunitpulse=['Unit' num2str(unit) '_pulses_' num2str(pulse)];
-  enabled(pulse) = getfield(ddopraw.Config,[thisunitpulse '_enabled']);
-  f(pulse)       = getfield(ddopraw.Config,[thisunitpulse '_frequency']);
+  if(nnode>1)
+    unit=1;
+    thisunitpulse=['Unit' num2str(unit) '_pulses_' num2str(pulse) '_'];
+  else
+    thisunitpulse=['pulses_' num2str(pulse) '_'];
+  end
+  enabled(pulse) = getfield(ddopraw.Config,[thisunitpulse 'enabled']);
+  f(pulse)       = getfield(ddopraw.Config,[thisunitpulse 'frequency']);
 end
 ddop.f     =f(enabled==1);
 
 % get list of beam names
 for unit=1:nnode
   for input=1:2
-    thisunitinputs = ['Unit' num2str(unit) '_inputs_' num2str(input)];
-    beamname{unit,input}  = strrep(getfield(ddopraw.Config,[thisunitinputs '_name']),' ','_');
+    if(nnode>1)
+      thisunitinputs = ['Unit' num2str(unit) '_inputs_' num2str(input) '_'];
+    else
+      thisunitinputs = ['inputs_' num2str(input) '_'];
+    end
+    beamname{unit,input}  = strrep(getfield(ddopraw.Config,[thisunitinputs 'name']),' ','_');
   end
 end
 ddop.beamname=beamname';

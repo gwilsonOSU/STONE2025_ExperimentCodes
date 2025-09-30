@@ -18,7 +18,7 @@ ustdThresh=.2;
 wscale=[-1 1]*.05;
 intensityScaleLog=[-7 -4];  % used for log10((r*amp)^2)
 corscale=[60 100];
-rlim=[.05 .26];  % range axis limits
+rlim=[.05 .3];  % range axis limits
 dtskip=1;  % decimate in time for plotting
 
 % TEMPORARY: At time of writing, a bug in beam2uvw causes us to drop one
