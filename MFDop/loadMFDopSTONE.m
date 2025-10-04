@@ -22,27 +22,33 @@ function ddop = loadMFDopSTONE(rawfn,heads,soundspeed,nnode)
 %         time.  (If the above doesn't make sense to you, then ignore this
 %         note -- you want the default behavior.)
 %
-%         ** TODO: Write up some examples of how to use the 'heads' variable.
+%
+%         Examples:
+%         heads = {'Main'}         % Single-head: 5-beam main head (u,v,w)
+%         heads = {'Aux1'}         % Single-head: vertical aux beam (w)
+%         heads = {'Aux2'}         % Single-head: horizontal aux beam (v)
+%         heads = {'Aux1','Aux2'}  % Multi-head: both aux beams
 %
 % OPTIONAL-INPUT:
 %
 % soundspeed : Speed of sound in water, if available.  Default 1500 m/s.
 %
+% nnode : Number of DragonDop nodes. If not provided, will be auto-detected
+%         from the data files by scanning for available DragonDop*_HostTime
+%         fields. The function automatically handles different field naming
+%         conventions based on active beam configuration per node.
+%         Default behavior is to auto-detect.
+%
 % OUTPUT:
 %
-% ** ** TODO: Below output descriptions are not correct, need updating.
+% ddop is a struct (or array of structs for multi-head mode) containing:
 %
-% ddop is a struct containing standard human-readable MFDop variables.  In
-% the case of multi-head mode, an array of ddop structs is returned, one for
-% each head.  Here are some relevant variables that are provided:
-%
-%   ddop.etime : Epoch timestamp for each data point.  These are from the
-%   internal DragonDop instrument clock.
-%
-%   ddop.r : Range from xdr (meters)
-%
-%   ddop.beamname = software name for each beam, ordered as in the 'f' and
-%     Phase|Cor|Amp variables
+%   ddop.dopraw     : Raw beam data (Phase, Cor, Amp, beamname, etime, r, etc.)
+%   ddop.uvw        : Processed velocity data (u, v, w components)
+%   ddop.beamvel    : Individual beam velocities
+%   ddop.headID     : Head identifier ('Main', 'Aux1', 'Aux2')
+%   ddop.soundspeed : Speed of sound used in processing
+%   ddop.rawfn      : List of input filenames
 %
 %
 % WARNING: For STONE 2025, multi-head mode still has the property that the
@@ -78,10 +84,11 @@ opts_unwrap.hybrid_mode = true;
 opts_unwrap.median3x3 = false;
 opts_unwrap.min_correl = 40;
 
-% nnode is the number of DD pitaya nodes (for STONE we had 4, for
-% Blasstex/ArchCape it was 3)
+% Auto-detect available nodes if nnode not provided
+% This scans the data files to find which DragonDop nodes exist and
+% automatically handles different beam configurations
 if(~exist('nnode'))
-  nnode=4;  % default
+  nnode = [];  % will auto-detect
 end
 
 % do some detective work to re-order the input files, accounting for lack of
@@ -124,21 +131,61 @@ for ifile=1:length(rawfn)
   % load the mat-file
   rawmat=load(rawfn{ifile});
 
-  % check to ensure the mat-file is non-empty before proceeding
-  isgood=zeros(1,nnode);
-  for idop=1:nnode
-    isgood(idop)=isfield(rawmat.Data,['DragonDop' num2str(idop) '_HostTime']);
+  % Auto-detect available nodes if not specified
+  if isempty(nnode) || ifile == 1
+    % Find all available DragonDop nodes in this file
+    data_fields = fieldnames(rawmat.Data);
+    available_nodes = [];
+    for j = 1:length(data_fields)
+      field_name = data_fields{j};
+      has_dragonDop = ~isempty(strfind(field_name, 'DragonDop'));
+      has_hostTime = ~isempty(strfind(field_name, 'HostTime'));
+      has_matlab = ~isempty(strfind(field_name, 'Matlab'));
+
+      if has_dragonDop && has_hostTime && ~has_matlab
+        % Extract node number from field name like 'DragonDop2_HostTime'
+        start_idx = strfind(field_name, 'DragonDop') + length('DragonDop');
+        end_idx = strfind(field_name, '_');
+        if ~isempty(end_idx) && end_idx(1) > start_idx
+          node_str = field_name(start_idx:end_idx(1)-1);
+          node_num = str2double(node_str);
+          if ~isnan(node_num)
+            available_nodes = [available_nodes node_num];
+          end
+        end
+      end
+    end
+    available_nodes = sort(unique(available_nodes));
+
+    if isempty(nnode)
+      node_list = available_nodes;
+      if isempty(node_list)
+        error('No DragonDop nodes found in data file. Check file format.');
+      end
+      nnode = max(node_list); % for backward compatibility
+    else
+      node_list = 1:nnode;
+    end
+  end
+
+  % check to ensure the mat-file has the expected nodes
+  isgood=zeros(1,length(node_list));
+  for i=1:length(node_list)
+    node_num = node_list(i);
+    isgood(i)=isfield(rawmat.Data,['DragonDop' num2str(node_num) '_HostTime']);
   end
   if(sum(~isgood)>0)
     this=dir(rawfn{ifile});
+    missing_nodes = node_list(~isgood);
     warning([rawfn{ifile} ...
              ' (size = ' num2str(this.bytes/1000) 'kB) ' ...
-             ' is missing DragonDop' num2str(find(~isgood),'%d,') ...
+             ' is missing DragonDop' num2str(missing_nodes,'%d,') ...
              ' skipping this file.'])
   else
 
     % parse the raw mat-file into human-readable variables
-    doprawmat=unpackDDmat(rawmat,nnode);
+    doprawmat=unpackDDmat(rawmat,max(node_list));
+
     clear rawmat  % no longer needed
 
     for ihead=1:length(heads)
@@ -225,6 +272,7 @@ for ifile=1:length(rawfn)
         elseif(strcmp(heads{1},'Aux2'))  % Aux2: horizontal aux beam
           beamlist = {'Aux_2'};
         end
+
         for j=1:length(beamlist)
           beamind(j)=findCellStr(doprawmat.beamname,beamlist{j});
         end

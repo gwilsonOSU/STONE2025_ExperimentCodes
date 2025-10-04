@@ -11,12 +11,15 @@ function ddop=unpackDDmat(ddopraw,nnode)
 %
 % OPTIONAL: set nnode to the number of red pitaya nodes used in the system.
 % This is for back-compatiblity with older data where we used 3 nodes
-% instead of 4 (e.g., Blasstex, or Arch Cape).
+% instead of 4 (e.g., Blasstex, or Arch Cape). The function automatically
+% handles different field naming conventions based on active beam configuration.
 %
 
 if(~exist('nnode'))
   nnode=4;
 end
+
+node_list = 1:nnode;
 
 %------------------------------------
 % config info
@@ -32,6 +35,8 @@ else
   fld_pingInterval='pingInterval';
   fld_pulseLength='pulseLength';
 end
+
+
 ddop.pingpairs    = double(getfield(ddopraw.Config,fld_pingPairsPerEnsemble));
 ddop.pingInterval = double(getfield(ddopraw.Config,fld_pingInterval));
 ddop.tau          = double(getfield(ddopraw.Config,fld_pulseLength));
@@ -90,11 +95,36 @@ for iv=1:length(vname)
   thisdata=zeros(nr,nt,nf,nb,np);  % init
   for ip=1:np  % for each pitaya
     ddname=['DragonDop' num2str(ip)];
+
+    % Check how many beams are active on this node
+    active_beams_on_node = 0;
+    for ib_check=1:nb
+      if isfield(ddopraw.Config, ['Unit' num2str(ip) '_inputs_' num2str(ib_check) '_active'])
+        if getfield(ddopraw.Config, ['Unit' num2str(ip) '_inputs_' num2str(ib_check) '_active']) == 1
+          active_beams_on_node = active_beams_on_node + 1;
+        end
+      end
+    end
+
     for ib=1:nb  % for each beam on this pitaya
-      beamname=ddop.beamname{ib,ip};
+      beamname_full=ddop.beamname{ib,ip};
       for ifs=1:length(fstr)  % for each freq
-        thisvar=getfield(ddopraw.Data,[ddname '_' vname{iv} '_' beamname '_' fstr{ifs}]);
-        thisdata(:,:,ifs,ib,ip)=double(thisvar(1:nt,:))';
+        % Use different naming convention based on number of active beams
+        if active_beams_on_node == 1
+          % Single beam active: omit beam name from field
+          fieldname = [ddname '_' vname{iv} '_' fstr{ifs}];
+        else
+          % Multiple beams active: include beam name
+          fieldname = [ddname '_' vname{iv} '_' beamname_full '_' fstr{ifs}];
+        end
+
+        if isfield(ddopraw.Data, fieldname)
+          thisvar=getfield(ddopraw.Data,fieldname);
+          thisdata(:,:,ifs,ib,ip)=double(thisvar(1:nt,:))';
+        else
+          % Fill with zeros if field doesn't exist
+          thisdata(:,:,ifs,ib,ip)=zeros(nr,nt);
+        end
       end
     end
   end
