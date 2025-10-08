@@ -1,4 +1,4 @@
-function [PHI_unwrapped, Vhat, vstd, iters, dbg] = unwrap_beatAndLS_optimized(PHI, F, tau, c, correl, v_bounds, opts)
+function [PHI_unwrapped, Vhat, vstd, iters, dbg] = unwrap_beatAndLS(PHI, F, tau, c, correl, v_bounds, opts)
 % UNWRAP_BEATANDLS_OPTIMIZED  Memory-optimized parallel version
 % Same interface as unwrap_beatAndLS but optimized for parallel execution
 % with minimal memory copying to workers
@@ -63,7 +63,8 @@ function [PHI_unwrapped, Vhat, vstd, iters, dbg] = unwrap_beatAndLS_optimized(PH
   vstd = zeros(R,T,B, 'like', PHI);
   iters = zeros(R,T,B, 'like', PHI);
 
-  % MAIN PARALLEL LOOP - properly scoped variables
+  % MAIN PARALLEL LOOP - properly scoped variables.  NOTE, this can be parfor
+  % if your system can handle it.
   parfor b = 1:B
       % Extract beam-specific data (parfor can handle simple array slicing)
       PHI_b = PHI(:,:,:,b);           % R x T x M

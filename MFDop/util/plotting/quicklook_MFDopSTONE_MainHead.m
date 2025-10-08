@@ -15,14 +15,14 @@ Cthresh=40;
 ustdThresh=.2;
 
 % plotting params
-uscale=[-1 1]*.5;
+uscale=[-1 1]*2;
 vscale=[-1 1]*.5;
 wscale=[-1 1]*.05;
 intensityScaleLog=[-5 -3];  % used for log10((r*amp)^2)
 corscale=[60 100];
 rbed=.07;  % distance from xdr to floor
 zlim=[-.05 .8];  % vertical axis limits
-dtskip=3;  % decimate in time for plotting
+dtskip=1;  % decimate in time for plotting
 
 % % TEMPORARY: At time of writing, a bug in beam2uvw causes us to drop one
 % % point.  Pad to fill.
