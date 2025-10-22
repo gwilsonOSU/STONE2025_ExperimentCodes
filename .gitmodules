@@ -1,0 +1,7 @@
+[submodule "SVSproc"]
+	path = submodules/SVS/SVSproc
+	url = git@github.com:gwilsonOSU/SVSproc.git
+	branch = STONE2025
+[submodule "SVSpin"]
+	path = submodules/SVS/SVSpin
+	url = git@github.com:gwilsonOSU/SVSpin.git
