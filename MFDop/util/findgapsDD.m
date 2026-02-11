@@ -1,4 +1,4 @@
-function [tvec,indexmap]=findgapsDD(tvec1raw,dt)
+function [tvec1,indexmap,ngaps]=findgapsDD(tvec1raw,dt)
 %
 % [tvec,indexmap]=findgapsDD(tvec1raw,dt)
 %
@@ -46,6 +46,7 @@ for i=1:length(gapind)
 end
 nt=max(indexmap);  % new padded timeseries length
 tvec1 = tvec1raw(1) + ([1:nt]'-1)*dt/24/3600;  % padded timeseries time vector
+ngaps=length(gapind);
 
 % Sanity Check: Convert tvec1raw to a padded version, and check that what we
 % get agrees with the perfectly-uniform 'tvec1' to within tolerance

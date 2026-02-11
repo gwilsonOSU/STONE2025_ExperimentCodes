@@ -37,10 +37,10 @@ nnode=1;  % when collecting ONLY Aux1+Aux2 (post-9/29)
 %------------------------------------------
 
 % Define input parameters
-basedir = '/media/wilsongr/LaCie/STONE/dataraw/20251001/MFDop';
-outdir = '/media/wilsongr/LaCie/STONE/dataprocessed/20251001/MFDop_L1';
+basedir = '/home/ibbisin1/STONE/dataraw/20251001/MFDop';
+outdir = '/home/ibbisin1/STONE/dataprocessed/20251001/MFDop_L1';
 dateStr = '20251001';
-xlsxFile = '/media/wilsongr/LaCie/STONE/dataraw/20251001/STONE2025_10012025.xlsx';
+xlsxFile = '/home/ibbisin1/STONE/DailyLogs/20251001/STONE2025_10012025_UPDATED.xlsx';
 
 unix(['mkdir -p ' outdir]);
 
